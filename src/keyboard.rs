@@ -4,8 +4,20 @@ use std::{
     time::Duration,
 };
 
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, SendInput, VkKeyScanW, INPUT, INPUT_KEYBOARD, KEYEVENTF_KEYUP, VIRTUAL_KEY,
+use windows::{
+    core::PCSTR,
+    Win32::{
+        Foundation::HWND,
+        System::DataExchange::GlobalAddAtomA,
+        UI::{
+            Input::KeyboardAndMouse::{
+                GetAsyncKeyState, RegisterHotKey, SendInput, UnregisterHotKey, VkKeyScanW,
+                HOT_KEY_MODIFIERS, INPUT, INPUT_KEYBOARD, KEYEVENTF_KEYUP, MOD_ALT, MOD_CONTROL,
+                MOD_SHIFT, MOD_WIN, VIRTUAL_KEY,
+            },
+            WindowsAndMessaging::{GetMessageA, MSG, WM_HOTKEY},
+        },
+    },
 };
 
 use crate::errors::{Error, Result};
@@ -20,12 +32,12 @@ pub fn input_keys(key_inputs: &[KeyInput]) -> Result<()> {
     let mut inputs = vec![zeroed; key_inputs.len()];
     for i in 0..key_inputs.len() {
         inputs[i].r#type = INPUT_KEYBOARD;
-        match key_inputs[i] {
+        match &key_inputs[i] {
             KeyInput::KeyDown(key) => {
-                inputs[i].Anonymous.ki.wVk = VIRTUAL_KEY(key as u16);
+                inputs[i].Anonymous.ki.wVk = VIRTUAL_KEY(*key as u16);
             }
             KeyInput::KeyUp(key) => {
-                inputs[i].Anonymous.ki.wVk = VIRTUAL_KEY(key as u16);
+                inputs[i].Anonymous.ki.wVk = VIRTUAL_KEY(*key as u16);
                 inputs[i].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
             }
         }
@@ -72,6 +84,87 @@ pub fn wait_keys_up(s: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn hotkey_register(hotkey: &str) -> Result<i32> {
+    let inputs = parse_str(hotkey)?;
+    let mut state = KeyState::new();
+
+    let mut modifiers: HOT_KEY_MODIFIERS = HOT_KEY_MODIFIERS(0);
+    let mut vk = 0u32;
+
+    for input in inputs {
+        if let KeyInput::KeyDown(key) = input {
+            if is_shift_key(key) {
+                if state.shift != KEY_STATE_NOT_PRESSED {
+                    bail!("Invalid hotkey");
+                }
+                modifiers.0 |= MOD_SHIFT.0;
+                state.shift = VK_SHIFT;
+            } else if is_ctrl_key(key) {
+                if state.ctrl != KEY_STATE_NOT_PRESSED {
+                    bail!("Invalid hotkey");
+                }
+                modifiers.0 |= MOD_CONTROL.0;
+                state.ctrl = VK_CONTROL;
+            } else if is_alt_key(key) {
+                if state.alt != KEY_STATE_NOT_PRESSED {
+                    bail!("Invalid hotkey");
+                }
+                modifiers.0 |= MOD_ALT.0;
+                state.alt = VK_MENU;
+            } else if is_win_key(key) {
+                if state.win != KEY_STATE_NOT_PRESSED {
+                    bail!("Invalid hotkey");
+                }
+                modifiers.0 |= MOD_WIN.0;
+                state.win = VK_LWIN;
+            } else {
+                if vk != 0 {
+                    bail!("Invalid hotkey");
+                }
+                vk = key.into();
+            }
+        } else {
+            break;
+        }
+    }
+
+    if vk == 0 {
+        bail!("Invalid hotkey");
+    }
+
+    let atom = unsafe { GlobalAddAtomA(PCSTR(hotkey.as_ptr())) };
+    if atom == 0 {
+        bail!(Error::with_chain(
+            std::io::Error::last_os_error(),
+            "GlobalAddAtomA() failed"
+        ));
+    }
+
+    let ret = unsafe { RegisterHotKey(HWND(0), atom.into(), modifiers, vk) };
+    if !ret.as_bool() {
+        bail!(Error::with_chain(
+            std::io::Error::last_os_error(),
+            "RegisterHotKey() failed"
+        ));
+    }
+
+    Ok(atom.into())
+}
+
+pub fn hotkey_unregister(id: i32) {
+    unsafe { UnregisterHotKey(HWND(0), id) };
+}
+
+pub fn hotkey_wait() -> Result<i32> {
+    let mut msg: MSG = unsafe { std::mem::zeroed() };
+    while unsafe { GetMessageA(&mut msg, HWND(0), 0, 0) }.as_bool() {
+        if msg.message == WM_HOTKEY {
+            return Ok(msg.wParam.0 as _);
+        }
+    }
+    bail!("Unknown!");
 }
 
 const VK_SHIFT: u8 = 0x10;
@@ -339,6 +432,7 @@ fn parse_str(s: &str) -> Result<Vec<KeyInput>> {
     Ok(result)
 }
 
+#[allow(dead_code)]
 fn mod_keys_up(inputs: &mut Vec<KeyInput>, state: &mut KeyState) -> () {
     if state.win != KEY_STATE_NOT_PRESSED {
         inputs.push(KeyInput::KeyUp(state.win));
@@ -405,7 +499,7 @@ fn parse_part(s: &str) -> Result<(u8, bool)> {
         return Err(format!("unknown key name {}", s).into());
     }
 
-    let mut ch: char = '\0';
+    let ch: char;
 
     if ESCAPED_KEY_NAME_TO_CHAR.contains_key(s) {
         ch = ESCAPED_KEY_NAME_TO_CHAR[s];
@@ -490,5 +584,16 @@ mod tests {
     fn switch_windows() -> Result<()> {
         println!("Testing start");
         input("<win+>23<win->")
+    }
+
+    #[test]
+    fn hotkey() {
+        let id = hotkey_register("<ctrl+y>").unwrap();
+        println!("id {}", id);
+
+        let wait = hotkey_wait().unwrap();
+        println!("wait {}", wait);
+
+        hotkey_unregister(id);
     }
 }

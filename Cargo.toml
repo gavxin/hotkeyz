@@ -3,20 +3,19 @@ name = "hotkeyz"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 error-chain = "0.12.4"
-deno_bindgen = "0.5.1"
-serde = { version = "1", features = ["derive"] }
 lazy_static = "1.4.0"
+serde = { version = "1", features = ["derive"] }
 
 [dependencies.windows]
 version = "0.36.1"
 features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_DataExchange",
+    "Win32_Foundation",
 ]
