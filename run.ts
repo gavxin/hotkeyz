@@ -67,14 +67,14 @@ const library = Deno.dlopen("./target/debug/hotkeyz.dll", {
 })
 
 library.symbols.mouse_move_to(0, 0);
-let enc = new TextEncoder();
+const enc = new TextEncoder();
 
-let ret = await library.symbols.hotkey_register(enc.encode("<ctrl+y>\0"));
+const ret = await library.symbols.hotkey_register(enc.encode("<ctrl+y>\0"));
 console.log(ret);
 
 let i = 0;
 while (i++ < 1) {
-  let id = await library.symbols.hotkey_wait();
+  const id = await library.symbols.hotkey_wait();
   console.log(id);
 }
 

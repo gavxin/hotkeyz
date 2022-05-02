@@ -1,6 +1,8 @@
 use std::os::raw::{c_char, c_int};
 
-use crate::{keyboard, mouse};
+use windows::Win32::Foundation::HWND;
+
+use crate::{keyboard, mouse, window};
 
 #[no_mangle]
 pub extern "C" fn kb_input(keys: *const c_char) -> c_int {
@@ -166,6 +168,37 @@ pub extern "C" fn mouse_button_press(button: c_int, press: c_int) -> c_int {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("{}", e);
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn window_find(caption: *const c_char, class: *const c_char) -> isize {
+    let cap_str = unsafe { std::ffi::CStr::from_ptr(caption).to_str().unwrap() };
+    let clz_str: Option<&str> = if class == std::ptr::null() {
+        None
+    } else {
+        Some(unsafe { std::ffi::CStr::from_ptr(class).to_str().unwrap() })
+    };
+
+    let hwnd = window::find_window(cap_str, clz_str);
+    hwnd.0
+}
+
+#[no_mangle]
+pub extern "C" fn window_get_rect(hwnd: isize, left: *mut c_int, right: *mut c_int, top: *mut c_int, bottom: *mut c_int) -> c_int {
+    match window::get_window_rect(&HWND(hwnd)) {
+        Some(rect) => {
+            unsafe {
+                *left = rect.left;
+                *right = rect.right;
+                *top = rect.top;
+                *bottom = rect.bottom;
+            }
+            0
+        }
+        None => {
             -1
         }
     }
