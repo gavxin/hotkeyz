@@ -1,5 +1,7 @@
 // deno run --allow-ffi --unstable run.ts
-const library = Deno.dlopen("./target/debug/hotkeyz.dll", {
+
+const dll_path = "./target/debug/hotkeyz.dll";
+const library = Deno.dlopen(dll_path, {
   kb_input: {
     parameters: ["pointer"],
     result: "i32",
@@ -64,18 +66,37 @@ const library = Deno.dlopen("./target/debug/hotkeyz.dll", {
     parameters: ["i32", "i32"],
     result: "i32",
   },
-})
+  window_find: {
+    parameters: ["pointer", "pointer"],
+    result: "isize",
+  },
+  window_get_rect: {
+    parameters: ["isize", "pointer", "pointer", "pointer", "pointer"],
+    result: "i32",
+  }
+});
 
-library.symbols.mouse_move_to(0, 0);
 const enc = new TextEncoder();
-
-const ret = await library.symbols.hotkey_register(enc.encode("<ctrl+y>\0"));
-console.log(ret);
-
-let i = 0;
-while (i++ < 1) {
-  const id = await library.symbols.hotkey_wait();
-  console.log(id);
+function str(s: string) {
+  return enc.encode(s + "\0");
 }
 
-await library.symbols.hotkey_unregister(ret);
+// keyboard example
+library.symbols.kb_input(str("abc"));
+
+// // mouse example
+// library.symbols.mouse_move_to(0, 0);
+
+// // hotkey example
+// const hotkey_id = await library.symbols.hotkey_register(str("<ctrl+y>"));
+// console.log(ret);
+// let i = 0;
+// while (i++ < 1) {
+//   const id = await library.symbols.hotkey_wait();
+//   console.log(id);
+//   if (id == hotkey_id) {
+//     console.log('hello');
+//   }
+// }
+// await library.symbols.hotkey_unregister(hotkey_id);
+

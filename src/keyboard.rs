@@ -362,7 +362,7 @@ fn parse_str(s: &str) -> Result<Vec<KeyInput>> {
         }
 
         if !part.is_empty() {
-            let (vk, shift) = parse_part(&part)?;
+            let (vk, shift) = parse_key_name(&part)?;
             part.clear();
             vk_shift_vec.push((vk, shift));
         }
@@ -486,13 +486,17 @@ fn push_key_down_and_up(
 }
 
 // return vk and shift pressed
-fn parse_part(s: &str) -> Result<(u8, bool)> {
+fn parse_key_name(s: &str) -> Result<(u8, bool)> {
     if s.len() == 0 {
         return Err(format!("expected key name").into());
     }
 
     if KEY_NAME_TO_VK.contains_key(s) {
         return Ok((KEY_NAME_TO_VK[s], false));
+    }
+
+    if let Ok(num) = s.parse::<u8>() {
+        return Ok((num, false));
     }
 
     if !ESCAPED_KEY_NAME_TO_CHAR.contains_key(s) && s.len() != 1 {
